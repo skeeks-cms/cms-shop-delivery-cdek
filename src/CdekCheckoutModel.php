@@ -13,6 +13,8 @@ use skeeks\cms\shop\delivery\DeliveryCheckoutModel;
 use yii\helpers\ArrayHelper;
 
 /**
+ * @property CdekDeliveryHandler $deliveryHandler
+ *
  * @author Semenov Alexander <semenov@skeeks.com>
  */
 class CdekCheckoutModel extends DeliveryCheckoutModel
@@ -33,7 +35,18 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
     public function rules()
     {
         return ArrayHelper::merge(parent::rules(), [
-            [['address'], 'required', 'message' => 'Выберите пункт выдачи заказа СДЭК.'],
+            [
+                ['address'],
+                'required',
+                'message' => 'Выберите пункт выдачи заказа СДЭК.',
+                'when'    => function () {
+
+                    if ($this->deliveryHandler) {
+                        return $this->deliveryHandler->isRequiredSelectPoint;
+                    }
+                    return true;
+            },
+            ],
             [['address'], 'string'],
             [['city'], 'string'],
             [['name'], 'string'],
@@ -48,13 +61,13 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
     public function attributeLabels()
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
-            'name'    => "Название ПВЗ",
-            'address' => "Адрес ПВЗ",
-            'price'   => "Цена",
-            'id'      => "Код ПВЗ",
-            'worktime'      => "Время работы",
-            'phone'      => "Телефон",
-            'city'      => "Город",
+            'name'     => "Название ПВЗ",
+            'address'  => "Адрес ПВЗ",
+            'price'    => "Цена",
+            'id'       => "Код ПВЗ",
+            'worktime' => "Время работы",
+            'phone'    => "Телефон",
+            'city'     => "Город",
         ]);
     }
 

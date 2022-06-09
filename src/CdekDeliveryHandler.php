@@ -37,6 +37,10 @@ class CdekDeliveryHandler extends DeliveryHandler
      * @var string Рассчитывать цену по выбранному ПВЗ?
      */
     public $isCalculatePrice = 0;
+    /**
+     * @var string Рассчитывать цену по выбранному ПВЗ?
+     */
+    public $isRequiredSelectPoint = 1;
 
     /**
      * @var string
@@ -62,6 +66,7 @@ class CdekDeliveryHandler extends DeliveryHandler
             [['cityFrom'], 'string'],
             [['country'], 'string'],
             [['isCalculatePrice'], 'integer'],
+            [['isRequiredSelectPoint'], 'integer'],
         ]);
     }
 
@@ -72,6 +77,7 @@ class CdekDeliveryHandler extends DeliveryHandler
             'cityFrom'         => "Из какого города будет идти доставка",
             'country'          => "Можно выбрать страну, для которой отображать список ПВЗ",
             'isCalculatePrice' => "Рассчитывать цену по выбранному ПВЗ?",
+            'isRequiredSelectPoint' => "Для оформления заказа ПВЗ должен быть выбран обязательно?",
 
             /*'api_key'     => "Ключ api",
 
@@ -89,6 +95,7 @@ class CdekDeliveryHandler extends DeliveryHandler
         return ArrayHelper::merge(parent::attributeHints(), [
             'defaultCity' => "Есди город не указан, то будет определен автоматически по координатам пользователя.",
             'isCalculatePrice' => "Если выбрано нет, то цена за доставку не будет рассчитываться.",
+            'isRequiredSelectPoint' => "Если выбрано да - то без выбранного ПВЗ заказ оформить не получится. Если выбрано нет - то заказ можно оформить без выбора ПВЗ",
         ]);
     }
 
@@ -107,6 +114,9 @@ class CdekDeliveryHandler extends DeliveryHandler
                     'cityFrom',
                     'country',
                     'isCalculatePrice' => [
+                        'class' => BoolField::class
+                    ],
+                    'isRequiredSelectPoint' => [
                         'class' => BoolField::class
                     ],
                 ],
