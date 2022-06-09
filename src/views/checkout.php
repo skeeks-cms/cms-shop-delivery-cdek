@@ -7,7 +7,7 @@
  */
 /**
  * @var $this yii\web\View
- * @var $widget \skeeks\cms\shop\delivery\cdek\CdekCheckoutWidget
+ * @var $widget \skeeks\cms\shop\cdek\CdekCheckoutWidget
  * @var $checkoutModel \skeeks\cms\shop\cdek\CdekCheckoutModel
  */
 $widget = $this->context;
@@ -18,20 +18,36 @@ if (!$checkoutModel instanceof $checkoutModelCurrent) {
     $checkoutModel = $checkoutModelCurrent;
 }
 
-$this->registerJs(<<<JS
+$cdekConfig = [
+    'defaultCity' => $widget->deliveryHandler->defaultCity ? $widget->deliveryHandler->defaultCity : "auto",
+    'cityFrom' => $widget->deliveryHandler->cityFrom,
 
-$(".sx-simple-widget").on("click", ".btn-check", function() {
-    $(".btn-check", $(".sx-simple-widget")).removeClass("sx-checked");
-    $(".sx-checked-icon", $(".sx-simple-widget")).empty();
-    $(this).addClass("sx-checked");
-    $(".sx-checked-icon", $(this)).append($(".sx-checked-icon", $(this)).data("icon")).append(" ");
-    
-    $("#simplecheckoutmodel-cms_user_address_id").val($(this).data("id")).change();
-});
+    /*'link' => "forpvz",*/
+    'hideMessages' => false,
+    'hidedress' => false,
+    'bymapcoord' => false,
+    'hidecash' => false,
+    'hidedelt' => false,
+    'detailAddress' => false,
+];
+
+/*if (isset(\Yii::$app->yaMap) && \Yii::$app->yaMap->api_key) {
+    $cdekWidget['apikey'] = \Yii::$app->yaMap->api_key;
+}*/
+
+$iframeUrl = \yii\helpers\Url::to(['/cdek/cdek/map', 'cdek' => $cdekConfig, 'options' => [
+    'id' => $widget->id
+]]);
+
+$json = \yii\helpers\Json::encode([
+    'id' => $widget->id
+]);
+
+$this->registerJs(<<<JS
 
 //Происходит когда пользователь меняет способ доставки в заказе
 //Тут можно дополнительно сделать расчет цены и отправить данные
-
+//apikey
 sx.classes.CdekWidget = sx.classes.Component.extend({
 
     _init: function()
@@ -42,10 +58,11 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         var self = this;
         
         this.getJForm().on("change-delivery", function() {
+            /*self.cdekWidget.open();*/
             $(this).submit();
         });
         
-        $("select, input, textarea", self.getJForm()).on("change", function () {
+        $("#cdekcheckoutmodel-address", self.getJForm()).on("change", function () {
             
             setTimeout(function() {
                 self.getJForm().submit();
@@ -53,78 +70,176 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         });
         
         
-        var widjet = new ISDEKWidjet({
-            hideMessages: false,
-            /*defaultCity: 'Москва',*/
-            cityFrom: 'Москва',
-            choose: true,
-            link: 'forpvz',
-            hidedress: false,
-            bymapcoord: false,
-            hidecash: false,
-            hidedelt: true,
-            detailAddress: true,
-            /*goods: [{
-                length: 10,
-                width: 10,
-                height: 10,
-                weight: 1
-            }],*/
-            onChoose: function(wat) {
-                
-                console.log(wat);
-                /*var Name = wat.cityName + " " + wat.PVZ.Address;
-                $("#forpvz-selected").empty().append(Name).append(Change).slideDown();
-                $("#forpvz").slideUp();
-                $("#relatedpropertiesmodel-sdek").val(Name).change();*/
-                
-            },
+        self.getJWidget().on("select", function(e, data){
+            var chooseData = data.data;
+            console.log(chooseData);
+            
+            $("#cdekcheckoutmodel-name").val(chooseData.PVZ.Name);
+            $("#cdekcheckoutmodel-address").val(chooseData.PVZ.Address);
+            $("#cdekcheckoutmodel-id").val(chooseData.PVZ.id);
+            $("#cdekcheckoutmodel-worktime").val(chooseData.PVZ.WorkTime);
+            $("#cdekcheckoutmodel-phone").val(chooseData.PVZ.Phone);
+            $("#cdekcheckoutmodel-city").val(chooseData.cityName);
+            //Если включен рассчет доставки
+            if ($("#cdekcheckoutmodel-price").length) {
+                $("#cdekcheckoutmodel-price").val(chooseData.price);
+            }
+            
+            if (chooseData.PVZ.WorkTime) {
+                $(".sx-cdek-worktime .sx-value", self.getJWidget()).empty().append(chooseData.PVZ.WorkTime);
+                $(".sx-cdek-worktime", self.getJWidget()).show();
+            } else {
+                $(".sx-cdek-worktime", self.getJWidget()).hide();
+            }
+            
+            if (chooseData.cityName) {
+                $(".sx-cdek-city .sx-value", self.getJWidget()).empty().append(chooseData.cityName);
+                $(".sx-cdek-city", self.getJWidget()).show();
+            } else {
+                $(".sx-cdek-city", self.getJWidget()).hide();
+            }
+            
+            if (chooseData.PVZ.Phone) {
+                $(".sx-cdek-phone .sx-value", self.getJWidget()).empty().append(chooseData.PVZ.Phone);
+                $(".sx-cdek-phone", self.getJWidget()).show();
+            } else {
+                $(".sx-cdek-phone", self.getJWidget()).hide();
+            }
+            
+            $(".sx-cdek-address", self.getJWidget()).empty().append(chooseData.PVZ.Address);
+            self.getJAddressWidget().fadeIn();
+            self.getJMapWidget().slideUp();
+            
+            setTimeout(function() {
+                $("#cdekcheckoutmodel-address").trigger("change");
+            });
         });
-
+        
+        $(".sx-tirgger-cdek-map", self.getJWidget()).on("click", function() {
+            self.getJMapWidget().slideDown();
+            self.getJAddressWidget().slideUp();
+            
+            
+            $("#cdekcheckoutmodel-name").val("");
+            $("#cdekcheckoutmodel-address").val("");
+            $("#cdekcheckoutmodel-id").val("");
+            $("#cdekcheckoutmodel-worktime").val("");
+            $("#cdekcheckoutmodel-city").val("");
+            $("#cdekcheckoutmodel-phone").val("");
+            //Если включен рассчет доставки
+            if ($("#cdekcheckoutmodel-price").length) {
+                $("#cdekcheckoutmodel-price").val("");
+            }
+            
+            setTimeout(function() {
+                self.getJForm().submit();
+            }, 300);
+        });
     },
     
     getJForm: function()
     {
-        return $("form", ".sx-cdek-widget");
+        return $("form", this.getJWidget());
+    },
+    
+    getJWidget: function()
+    {
+        return $("#" + this.get("id"));
+    },
+    
+    getJAddressWidget: function()
+    {
+        return $(".sx-selected-cdek-wrapper", this.getJWidget());
+    },
+    
+    getJMapWidget: function()
+    {
+        return $(".sx-map-cdek-wrapper", this.getJWidget());
     }
 });
  
-new sx.classes.CdekWidget();
+new sx.classes.CdekWidget({$json});
 
 
 JS
 );
 $this->registerCss(<<<CSS
 
-.sx-simple-widget .sx-checked-icon {
+.sx-cdek-widget iframe {
+    border: none;
+    width: 100%;
+    height: 500px;
+}
+
+.sx-cdek-widget .sx-checked-icon {
     margin-right: 5px;
-}
-
-.populated .sx-trigger-show-map {
-    font-size: 10px;
-    top: 4px;
-}
-
-.sx-address {
-    text-align: left;
 }
 
 CSS
 );
+
+//\skeeks\cms\shop\cdek\CdekCheckoutWidgetAsset::register($this)
+/*$this->registerJsFile("https://widget.cdek.ru/widget/widjet.js", [
+    'id' => 'ISDEKscript',
+    'depends' => [
+        \yii\web\JqueryAsset::class
+    ]
+]);*/
 ?>
 
-<div class="sx-cdek-widget">
+<div class="sx-cdek-widget" id="<?php echo $widget->id; ?>">
     <?php $form = \yii\bootstrap\ActiveForm::begin([
         'enableClientValidation' => false,
     ]); ?>
 
-    <div class="cms-user-field">
+    <div class="cms-user-field sx-hidden">
+        <?php echo $form->field($checkoutModel, 'id'); ?>
         <?php echo $form->field($checkoutModel, 'name'); ?>
         <?php echo $form->field($checkoutModel, 'address'); ?>
+        <?php echo $form->field($checkoutModel, 'worktime'); ?>
+        <?php echo $form->field($checkoutModel, 'phone'); ?>
+        <?php echo $form->field($checkoutModel, 'city'); ?>
+        <?php if($widget->deliveryHandler->isCalculatePrice) : ?>
+            <?php echo $form->field($checkoutModel, 'price'); ?>
+        <?php endif; ?>
     </div>
 
     <div class="sx-address-fields">
-        <script id="ISDEKscript" type="text/javascript" src="https://widget.cdek.ru/widget/widjet.js" charset="utf-8"></script>
+
+
+        <div class="sx-selected-cdek-wrapper <?php echo $checkoutModel->address ? : "sx-hidden"; ?>">
+            <div class="sx-address btn btn-block btn-check sx-checked"
+            >
+                <div class="d-flex">
+                    <!--<span class="sx-checked-icon my-auto" data-icon="✓">
+                        ✓
+                    </span>-->
+                    <div class="sx-address-info">
+                        <div class="sx-cdek-city <?php echo $checkoutModel->city ? "": "sx-hidden"; ?>">
+                            <span class="sx-value"><?php echo $checkoutModel->city ? $checkoutModel->city : "нет"; ?></span>
+                        </div>
+                        <div class="sx-cdek-address">
+                            <?php echo $checkoutModel->address; ?>
+                        </div>
+                        <div class="sx-cdek-phone <?php echo $checkoutModel->phone ? "": "sx-hidden"; ?>">
+                            Телефон: <span class="sx-value"><?php echo $checkoutModel->phone ? $checkoutModel->phone : "нет"; ?></span>
+                        </div>
+                        <div class="sx-cdek-worktime <?php echo $checkoutModel->worktime ? "": "sx-hidden"; ?>">
+                            Время работы: <span class="sx-value"><?php echo $checkoutModel->worktime ? $checkoutModel->worktime : ""; ?></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="sx-tirgger-cdek-map btn btn-block btn-check">
+                Выбрать другой пункт
+            </div>
+        </div>
+
+        <div class="sx-map-cdek-wrapper <?php echo $checkoutModel->address ? "sx-hidden": ""; ?>">
+            <iframe src="<?php echo $iframeUrl; ?>"></iframe>
+        </div>
+
     </div>
     <? $form::end(); ?>
 </div>

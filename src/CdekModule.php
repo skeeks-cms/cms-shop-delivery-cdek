@@ -8,14 +8,16 @@
 
 namespace skeeks\cms\shop\cdek;
 
-use skeeks\cms\shop\delivery\DeliveryCheckoutWidget;
+use skeeks\cms\money\Money;
+use skeeks\cms\shop\delivery\DeliveryCheckoutModel;
+use skeeks\cms\shop\models\ShopOrder;
+use yii\base\Module;
+use yii\helpers\ArrayHelper;
 
 /**
- * @property CdekDeliveryHandler $deliveryHandler
- *
  * @author Semenov Alexander <semenov@skeeks.com>
  */
-class CdekCheckoutWidget extends DeliveryCheckoutWidget
+class CdekModule extends Module
 {
-
+    public $controllerNamespace = 'skeeks\cms\shop\cdek\controllers';
 }

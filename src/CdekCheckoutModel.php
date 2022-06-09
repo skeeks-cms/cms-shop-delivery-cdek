@@ -10,7 +10,6 @@ namespace skeeks\cms\shop\cdek;
 
 use skeeks\cms\money\Money;
 use skeeks\cms\shop\delivery\DeliveryCheckoutModel;
-use skeeks\cms\shop\models\ShopOrder;
 use yii\helpers\ArrayHelper;
 
 /**
@@ -22,8 +21,13 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
      * @var string
      */
     public $id;
+
     public $name;
+    public $city;
     public $address;
+    public $worktime;
+    public $phone;
+
     public $price;
 
     public function rules()
@@ -31,18 +35,26 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
         return ArrayHelper::merge(parent::rules(), [
             [['address'], 'required', 'message' => 'Выберите пункт выдачи заказа СДЭК.'],
             [['address'], 'string'],
+            [['city'], 'string'],
             [['name'], 'string'],
             [['address'], 'string'],
             [['price'], 'string'],
+            [['id'], 'string'],
+            [['worktime'], 'string'],
+            [['phone'], 'string'],
         ]);
     }
 
     public function attributeLabels()
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
-            'name'           => "Название ПВЗ",
-            'address'         => "Адрес ПВЗ",
-            'price'        => "Цена",
+            'name'    => "Название ПВЗ",
+            'address' => "Адрес ПВЗ",
+            'price'   => "Цена",
+            'id'      => "Код ПВЗ",
+            'worktime'      => "Время работы",
+            'phone'      => "Телефон",
+            'city'      => "Город",
         ]);
     }
 
@@ -51,10 +63,55 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
      */
     public function getVisibleAttributes()
     {
-        return [
-            'name',
-            'address',
-        ];
+        $result = [];
+
+        if ($this->city) {
+            $result['city'] = [
+                'value' => $this->city,
+                'label' => 'Город',
+            ];
+        }
+        if ($this->address) {
+            $result['address'] = [
+                'value' => $this->address,
+                'label' => 'Адрес',
+            ];
+        }
+        if ($this->name) {
+            $result['name'] = [
+                'value' => $this->name,
+                'label' => 'Название',
+            ];
+        }
+        if ($this->phone) {
+            $result['phone'] = [
+                'value' => $this->phone,
+                'label' => 'Телефон',
+            ];
+        }
+        if ($this->worktime) {
+            $result['worktime'] = [
+                'value' => $this->worktime,
+                'label' => 'Время работы',
+            ];
+        }
+
+        if ($this->id) {
+            $result['id'] = [
+                'value' => $this->id,
+                'label' => 'Код ПВЗ',
+            ];
+        }
+
+        /*if ($this->money->amount) {
+            $result['price'] = [
+                'value' => (string)$this->money,
+                'label' => 'Стоимость',
+            ];
+        }*/
+
+
+        return $result;
     }
 
     /**
@@ -62,9 +119,11 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
      */
     public function getMoney()
     {
-        return new Money((string) $this->price, $this->shopOrder->currency_code);
+        if ((float)$this->price) {
+            return new Money((string)$this->price, $this->shopOrder->currency_code);
+        }
+        return parent::getMoney();
     }
-
 
 
 }

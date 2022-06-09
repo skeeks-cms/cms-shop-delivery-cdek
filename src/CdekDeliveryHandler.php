@@ -9,13 +9,9 @@
 namespace skeeks\cms\shop\cdek;
 
 use skeeks\cms\shop\delivery\DeliveryHandler;
-use skeeks\cms\shop\models\ShopOrder;
-use skeeks\cms\shop\widgets\admin\SmartWeightInputWidget;
+use skeeks\yii2\form\fields\BoolField;
 use skeeks\yii2\form\fields\FieldSet;
-use skeeks\yii2\form\fields\NumberField;
-use skeeks\yii2\form\fields\WidgetField;
 use yii\helpers\ArrayHelper;
-use yii\widgets\ActiveForm;
 
 /**
  * @author Semenov Alexander <semenov@skeeks.com>
@@ -23,12 +19,30 @@ use yii\widgets\ActiveForm;
 class CdekDeliveryHandler extends DeliveryHandler
 {
 
-    public $city_from = 'Москва';
+    /**
+     * @var string Какой город отображается по умолчанию
+     */
+    public $defaultCity = '';
+
+    /**
+     * @var string Из какого города будет идти доставка
+     */
+    public $cityFrom = 'Москва';
+
+    /**
+     * @var string Можно выбрать страну, для которой отображать список ПВЗ
+     */
+    public $country = 'Россия';
+    /**
+     * @var string Рассчитывать цену по выбранному ПВЗ?
+     */
+    public $isCalculatePrice = 0;
 
     /**
      * @var string
      */
     public $checkoutModelClass = CdekCheckoutModel::class;
+    public $checkoutWidgetClass = CdekCheckoutWidget::class;
 
     /**
      * @return array
@@ -44,14 +58,20 @@ class CdekDeliveryHandler extends DeliveryHandler
     public function rules()
     {
         return ArrayHelper::merge(parent::rules(), [
-            [['city_from'], 'string'],
+            [['defaultCity'], 'string'],
+            [['cityFrom'], 'string'],
+            [['country'], 'string'],
+            [['isCalculatePrice'], 'integer'],
         ]);
     }
 
     public function attributeLabels()
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
-            'city_from'     => "Город отображаемый изначально на карте",
+            'defaultCity'      => "Какой город отображается по умолчанию",
+            'cityFrom'         => "Из какого города будет идти доставка",
+            'country'          => "Можно выбрать страну, для которой отображать список ПВЗ",
+            'isCalculatePrice' => "Рассчитывать цену по выбранному ПВЗ?",
 
             /*'api_key'     => "Ключ api",
 
@@ -67,7 +87,8 @@ class CdekDeliveryHandler extends DeliveryHandler
     public function attributeHints()
     {
         return ArrayHelper::merge(parent::attributeHints(), [
-            'city_from' => "",
+            'defaultCity' => "Есди город не указан, то будет определен автоматически по координатам пользователя.",
+            'isCalculatePrice' => "Если выбрано нет, то цена за доставку не будет рассчитываться.",
         ]);
     }
 
@@ -78,11 +99,16 @@ class CdekDeliveryHandler extends DeliveryHandler
     public function getConfigFormFields()
     {
         return [
-            'main'    => [
+            'main' => [
                 'class'  => FieldSet::class,
                 'name'   => 'Основные',
                 'fields' => [
-                    'city_from',
+                    'defaultCity',
+                    'cityFrom',
+                    'country',
+                    'isCalculatePrice' => [
+                        'class' => BoolField::class
+                    ],
                 ],
             ],
             /*'default' => [
