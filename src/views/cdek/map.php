@@ -35,9 +35,17 @@ html, body {
     var jsData2 = {
         detailAddress: true,
         choose: true,
-        choose: true,
 
-        hidedress: false,
+        //В виджете скрыты варианты доставки: курьер или ПВЗ.
+        hidedelt: true,
+
+        //В виджете скрыты фильтры для отображения ПВЗ
+        hidedress: true,
+        hidecash: true,
+
+        //В виджете скрыт фильтр для отображения ПВЗ с примеркой.
+        hidedress: true,
+
                     bymapcoord: false,
                     hidecash: false,
                     hidedelt: true,
