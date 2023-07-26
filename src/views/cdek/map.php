@@ -31,6 +31,15 @@ html, body {
     var parentElementId = "<?php echo $parentWidgetId; ?>";
     var jsData = <?php echo $jsData; ?>;
 
+
+    if (typeof window.parent.$ === 'undefined') {
+        console.log('no jquery');
+        window.parent.addEventListener('load', function () {
+              alert("В родительском окне нет нужной библиотеки jquery. Пожалуйста, сообщите разработчикам!")
+        })
+    }
+
+
     var jParentWidget = window.parent.$("#" + parentElementId);
     var jsData2 = {
         detailAddress: true,

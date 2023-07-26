@@ -40,7 +40,8 @@ $iframeUrl = \yii\helpers\Url::to(['/cdek/cdek/map', 'cdek' => $cdekConfig, 'opt
 ]]);
 
 $json = \yii\helpers\Json::encode([
-    'id' => $widget->id
+    'id' => $widget->id,
+    'iframeUrl' => $iframeUrl,
 ]);
 
 $this->registerJs(<<<JS
@@ -56,6 +57,12 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
     _onDomReady: function()
     {
         var self = this;
+        
+        self.getJMapWidget().append(
+            $("<iframe>", {
+                'src' : self.get('iframeUrl')
+            })
+        );
         
         this.getJForm().on("change-delivery", function() {
             /*self.cdekWidget.open();*/
@@ -237,7 +244,7 @@ CSS
         </div>
 
         <div class="sx-map-cdek-wrapper <?php echo $checkoutModel->address ? "sx-hidden": ""; ?>">
-            <iframe src="<?php echo $iframeUrl; ?>"></iframe>
+            <!--<iframe src="<?php /*echo $iframeUrl; */?>"></iframe>-->
         </div>
 
     </div>
