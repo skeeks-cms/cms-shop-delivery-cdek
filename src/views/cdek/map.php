@@ -41,6 +41,7 @@ html, body {
 
 
     var jParentWidget = window.parent.$("#" + parentElementId);
+
     var jsData2 = {
         detailAddress: true,
         choose: true,
@@ -55,10 +56,12 @@ html, body {
         //В виджете скрыт фильтр для отображения ПВЗ с примеркой.
         hidedress: true,
 
-                    bymapcoord: false,
-                    hidecash: false,
-                    hidedelt: true,
-                    detailAddress: true,
+        bymapcoord: false,
+        hidecash: false,
+        hidedelt: true,
+        detailAddress: true,
+
+        apikey: "<?php echo \Yii::$app->yaMap->api_key; ?>",
 
         onChoose: function(wat) {
             jParentWidget.trigger("select", {
