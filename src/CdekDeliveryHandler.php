@@ -29,6 +29,17 @@ class CdekDeliveryHandler extends DeliveryHandler
      */
     public $cityFrom = 'Москва';
 
+
+    /**
+     * @var string
+     */
+    public $account = '';
+
+    /**
+     * @var string
+     */
+    public $secure = '';
+
     /**
      * @var string Можно выбрать страну, для которой отображать список ПВЗ
      */
@@ -64,6 +75,12 @@ class CdekDeliveryHandler extends DeliveryHandler
         return ArrayHelper::merge(parent::rules(), [
             [['defaultCity'], 'string'],
             [['cityFrom'], 'string'],
+
+            [['account'], 'required'],
+            [['secure'], 'required'],
+
+            [['account'], 'string'],
+            [['secure'], 'string'],
             [['country'], 'string'],
             [['isCalculatePrice'], 'integer'],
             [['isRequiredSelectPoint'], 'integer'],
@@ -78,6 +95,9 @@ class CdekDeliveryHandler extends DeliveryHandler
             'country'          => "Можно выбрать страну, для которой отображать список ПВЗ",
             'isCalculatePrice' => "Рассчитывать цену по выбранному ПВЗ?",
             'isRequiredSelectPoint' => "Для оформления заказа ПВЗ должен быть выбран обязательно?",
+
+            'account' => "Account/Идентификатор",
+            'secure' => "Secure password/Пароль",
 
             /*'api_key'     => "Ключ api",
 
@@ -96,6 +116,9 @@ class CdekDeliveryHandler extends DeliveryHandler
             'defaultCity' => "Есди город не указан, то будет определен автоматически по координатам пользователя.",
             'isCalculatePrice' => "Если выбрано нет, то цена за доставку не будет рассчитываться.",
             'isRequiredSelectPoint' => "Если выбрано да - то без выбранного ПВЗ заказ оформить не получится. Если выбрано нет - то заказ можно оформить без выбора ПВЗ",
+
+            'account' => "Получить доступ по адресу: <a href='https://lk.cdek.ru/integration'>https://lk.cdek.ru/integration</a>",
+            'secure' => "Получить доступ по адресу: <a href='https://lk.cdek.ru/integration'>https://lk.cdek.ru/integration</a>",
         ]);
     }
 
@@ -110,6 +133,9 @@ class CdekDeliveryHandler extends DeliveryHandler
                 'class'  => FieldSet::class,
                 'name'   => 'Основные',
                 'fields' => [
+                    'account',
+                    'secure',
+
                     'defaultCity',
                     'cityFrom',
                     'country',

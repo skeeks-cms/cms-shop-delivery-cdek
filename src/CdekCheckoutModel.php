@@ -24,6 +24,9 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
      */
     public $id;
 
+    public $dataAddress;
+    public $dataPrice;
+
     public $name;
     public $city;
     public $address;

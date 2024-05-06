@@ -17,27 +17,31 @@ $checkoutModel = $widget->shopOrder->deliveryHandlerCheckoutModel;
 if (!$checkoutModel instanceof $checkoutModelCurrent) {
     $checkoutModel = $checkoutModelCurrent;
 }
-
 $cdekConfig = [
-    'defaultCity' => $widget->deliveryHandler->defaultCity ? $widget->deliveryHandler->defaultCity : "auto",
-    'cityFrom' => $widget->deliveryHandler->cityFrom,
+    /*'defaultCity' => $widget->deliveryHandler->defaultCity ? $widget->deliveryHandler->defaultCity : "auto",
+    'cityFrom' => $widget->deliveryHandler->cityFrom,*/
 
     /*'link' => "forpvz",*/
-    'hideMessages' => false,
+    /*'hideMessages' => false,
     'hidedress' => false,
     'bymapcoord' => false,
     'hidecash' => false,
     'hidedelt' => false,
-    'detailAddress' => false,
+    'detailAddress' => false,*/
 ];
 
 /*if (isset(\Yii::$app->yaMap) && \Yii::$app->yaMap->api_key) {
     $cdekWidget['apikey'] = \Yii::$app->yaMap->api_key;
 }*/
 
-$iframeUrl = \yii\helpers\Url::to(['/cdek/cdek/map', 'cdek' => $cdekConfig, 'options' => [
-    'id' => $widget->id
-]]);
+$iframeUrl = \yii\helpers\Url::to(['/cdek/cdek/map',
+    //'cdek' => $cdekConfig,
+    'delivery_id' => $checkoutModel->delivery->id,
+    'order_id' => $widget->shopOrder->id,
+    'options' => [
+        'id' => $widget->id
+    ]]
+);
 
 $json = \yii\helpers\Json::encode([
     'id' => $widget->id,
@@ -79,41 +83,42 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         
         self.getJWidget().on("select", function(e, data){
             var chooseData = data.data;
+            
             console.log(chooseData);
             
-            $("#cdekcheckoutmodel-name").val(chooseData.PVZ.Name);
-            $("#cdekcheckoutmodel-address").val(chooseData.PVZ.Address);
-            $("#cdekcheckoutmodel-id").val(chooseData.PVZ.id);
-            $("#cdekcheckoutmodel-worktime").val(chooseData.PVZ.WorkTime);
-            $("#cdekcheckoutmodel-phone").val(chooseData.PVZ.Phone);
-            $("#cdekcheckoutmodel-city").val(chooseData.cityName);
+            $("#cdekcheckoutmodel-name").val(chooseData.address.name);
+            $("#cdekcheckoutmodel-address").val(chooseData.address.address);
+            $("#cdekcheckoutmodel-id").val(chooseData.address.code);
+            $("#cdekcheckoutmodel-worktime").val(chooseData.address.work_time);
+            /*$("#cdekcheckoutmodel-phone").val(chooseData.address.Phone);*/
+            $("#cdekcheckoutmodel-city").val(chooseData.address.city);
             //Если включен рассчет доставки
             if ($("#cdekcheckoutmodel-price").length) {
                 $("#cdekcheckoutmodel-price").val(chooseData.price);
             }
             
-            if (chooseData.PVZ.WorkTime) {
-                $(".sx-cdek-worktime .sx-value", self.getJWidget()).empty().append(chooseData.PVZ.WorkTime);
+            if (chooseData.address.work_time) {
+                $(".sx-cdek-worktime .sx-value", self.getJWidget()).empty().append(chooseData.address.work_time);
                 $(".sx-cdek-worktime", self.getJWidget()).show();
             } else {
                 $(".sx-cdek-worktime", self.getJWidget()).hide();
             }
             
-            if (chooseData.cityName) {
-                $(".sx-cdek-city .sx-value", self.getJWidget()).empty().append(chooseData.cityName);
+            if (chooseData.address.city) {
+                $(".sx-cdek-city .sx-value", self.getJWidget()).empty().append(chooseData.address.city);
                 $(".sx-cdek-city", self.getJWidget()).show();
             } else {
                 $(".sx-cdek-city", self.getJWidget()).hide();
             }
             
-            if (chooseData.PVZ.Phone) {
+            /*if (chooseData.PVZ.Phone) {
                 $(".sx-cdek-phone .sx-value", self.getJWidget()).empty().append(chooseData.PVZ.Phone);
                 $(".sx-cdek-phone", self.getJWidget()).show();
             } else {
                 $(".sx-cdek-phone", self.getJWidget()).hide();
-            }
+            }*/
             
-            $(".sx-cdek-address", self.getJWidget()).empty().append(chooseData.PVZ.Address);
+            $(".sx-cdek-address", self.getJWidget()).empty().append(chooseData.address.address);
             self.getJAddressWidget().fadeIn();
             self.getJMapWidget().slideUp();
             
@@ -175,7 +180,7 @@ $this->registerCss(<<<CSS
 .sx-cdek-widget iframe {
     border: none;
     width: 100%;
-    height: 500px;
+    height: 600px;
 }
 
 .sx-cdek-widget .sx-checked-icon {
