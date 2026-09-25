@@ -24,6 +24,10 @@ class CdekService
      * @var array Data From Request
      */
     private $requestData;
+    /**
+     * @var int Время кеширования полного списка точек, сек.
+     */
+    public $officesCacheDuration = 3600;
 
     public function __construct($login, $secret, $baseUrl = 'https://api.cdek.ru/v2')
     {
@@ -39,8 +43,6 @@ class CdekService
         if (!isset($this->requestData['action'])) {
             $this->sendValidationError('Action is required');
         }
-
-        $this->getAuthToken();
 
         switch ($this->requestData['action']) {
             case 'offices':
@@ -187,6 +189,13 @@ class CdekService
 
     private function getAuthToken()
     {
+        $cacheKey = [__CLASS__, 'token', $this->baseUrl, $this->login, md5((string)$this->secret)];
+        $cached = \Yii::$app->cache->get($cacheKey);
+        if ($cached) {
+            $this->authToken = $cached;
+            return;
+        }
+
         $token = $this->httpRequest('oauth/token', array(
             'grant_type' => 'client_credentials',
             'client_id' => $this->login,
@@ -194,14 +203,23 @@ class CdekService
         ), true);
         $result = json_decode($token['result'], true);
         if (!isset($result['access_token'])) {
-            throw new RuntimeException('Server not authorized to CDEK API');
+            throw new \RuntimeException('Server not authorized to CDEK API');
         }
 
         $this->authToken = $result['access_token'];
+
+        $ttl = isset($result['expires_in']) ? (int)$result['expires_in'] - 300 : 0;
+        if ($ttl > 0) {
+            \Yii::$app->cache->set($cacheKey, $this->authToken, $ttl);
+        }
     }
 
     private function httpRequest($method, $data, $useFormData = false, $useJson = false)
     {
+        if (!$this->authToken && $method !== 'oauth/token') {
+            $this->getAuthToken();
+        }
+
         $ch = curl_init("$this->baseUrl/$method");
 
         $headers = array(
@@ -241,7 +259,7 @@ class CdekService
         $result = substr($response, $headerSize);
         $addedHeaders = $this->getHeaderValue($headers);
         if ($result === false) {
-            throw new RuntimeException(curl_error($ch), curl_errno($ch));
+            throw new \RuntimeException(curl_error($ch), curl_errno($ch));
         }
 
         return array('result' => $result, 'addedHeaders' => $addedHeaders);
@@ -269,9 +287,38 @@ class CdekService
         exit();
     }
 
+    /**
+     * Виджет v3, получив заголовок X-Total-Elements, запрашивает точки параллельно
+     * страницами по 500 штук и упирается в лимит запросов сервера (429).
+     * Поэтому заголовки пагинации не передаются: виджет делает один запрос без size
+     * и получает все точки сразу. Полный список точек кешируется.
+     */
     protected function getOffices()
     {
-        return $this->httpRequest('deliverypoints', $this->requestData);
+        $params = $this->requestData;
+        unset($params['action']);
+
+        $isFullList = empty($params['size']);
+        if ($isFullList) {
+            unset($params['page'], $params['size']);
+            ksort($params);
+            $cacheKey = [__CLASS__, 'offices', $this->baseUrl, $params];
+            $cached = \Yii::$app->cache->get($cacheKey);
+            if ($cached !== false) {
+                return $cached;
+            }
+        }
+
+        $response = $this->httpRequest('deliverypoints', $params);
+        $response['addedHeaders'] = array_filter($response['addedHeaders'], static function ($line) {
+            return stripos($line, 'X-Total-') !== 0 && stripos($line, 'X-Current-') !== 0;
+        });
+
+        if ($isFullList && strncmp(ltrim($response['result']), '[', 1) === 0) {
+            \Yii::$app->cache->set($cacheKey, $response, $this->officesCacheDuration);
+        }
+
+        return $response;
     }
 
     protected function calculate()
