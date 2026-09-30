@@ -46,6 +46,11 @@ $iframeUrl = \yii\helpers\Url::to(['/cdek/cdek/map',
 $json = \yii\helpers\Json::encode([
     'id' => $widget->id,
     'iframeUrl' => $iframeUrl,
+    'orderId' => $widget->shopOrder->id,
+    'deliveryId' => $checkoutModel->delivery->id,
+    'calculationHash' => $checkoutModel->deliveryCalculationHash,
+    'isChooseTariff' => (bool)$widget->deliveryHandler->isChooseTariff,
+    'isMapOpen' => !$checkoutModel->address,
 ]);
 
 $this->registerJs(<<<JS
@@ -61,12 +66,39 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
     _onDomReady: function()
     {
         var self = this;
+        var mapCalculationHash = self.get('calculationHash') || '';
+        var isMapOpen = self.get('isMapOpen');
+        var ensureMap = function() {
+            if (!isMapOpen || self.getJMapWidget().find('iframe').length) {
+                return;
+            }
+            var url = self.get('iframeUrl');
+            self.getJMapWidget().append($('<iframe>', {
+                src: url + (url.indexOf('?') === -1 ? '?' : '&') +
+                    '_deliveryRevision=' + encodeURIComponent(mapCalculationHash)
+            }));
+        };
+
+        // Cart AJAX may update totals without rendering the delivery widget again.
+        $(document).off('ajaxSuccess.sxCdekDelivery').on('ajaxSuccess.sxCdekDelivery', function(e, xhr) {
+            var response = xhr.responseJSON;
+            var order = response && response.data;
+            if (!order || String(order.id) !== String(self.get('orderId')) ||
+                String(order.shop_delivery_id) !== String(self.get('deliveryId')) || !order.deliveryCalculation) {
+                return;
+            }
+            var error = order.deliveryCalculation.error || '';
+            self.getJWidget().find('.sx-delivery-calculation-error').text(error).toggle(Boolean(error));
+            // The iframe embeds parcels at creation; its old tariff list cannot be reused.
+            var inputHash = order.deliveryCalculation.inputHash || '';
+            if (self.get('isChooseTariff') && inputHash !== mapCalculationHash) {
+                mapCalculationHash = inputHash;
+                self.getJMapWidget().empty();
+            }
+            ensureMap();
+        });
         
-        self.getJMapWidget().append(
-            $("<iframe>", {
-                'src' : self.get('iframeUrl')
-            })
-        );
+        ensureMap();
         
         this.getJForm().on("change-delivery", function() {
             /*self.cdekWidget.open();*/
@@ -83,6 +115,7 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         
         self.getJWidget().on("select", function(e, data){
             var chooseData = data.data;
+            self.getJWidget().find('.sx-delivery-calculation-error').hide();
             
             console.log(chooseData);
             
@@ -92,9 +125,12 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
             $("#cdekcheckoutmodel-worktime").val(chooseData.address.work_time);
             /*$("#cdekcheckoutmodel-phone").val(chooseData.address.Phone);*/
             $("#cdekcheckoutmodel-city").val(chooseData.address.city);
+            $("#cdekcheckoutmodel-tariffcode").val(chooseData.tariff ? chooseData.tariff.tariff_code : "");
             //Если включен рассчет доставки
             if ($("#cdekcheckoutmodel-price").length) {
-                $("#cdekcheckoutmodel-price").val(chooseData.price);
+                // Виджет v3 возвращает стоимость в выбранном тарифе.
+                var deliveryPrice = chooseData.tariff ? chooseData.tariff.delivery_sum : chooseData.price;
+                $("#cdekcheckoutmodel-price").val(deliveryPrice == null ? "" : String(deliveryPrice));
             }
             
             if (chooseData.address.work_time) {
@@ -120,7 +156,9 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
             
             $(".sx-cdek-address", self.getJWidget()).empty().append(chooseData.address.address);
             self.getJAddressWidget().fadeIn();
-            self.getJMapWidget().slideUp();
+            isMapOpen = false;
+            // Unload the provider map, rather than keeping its heavy runtime hidden.
+            self.getJMapWidget().stop(true, true).hide().empty();
             
             setTimeout(function() {
                 $("#cdekcheckoutmodel-address").trigger("change");
@@ -128,6 +166,8 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         });
         
         $(".sx-tirgger-cdek-map", self.getJWidget()).on("click", function() {
+            isMapOpen = true;
+            self.getJMapWidget().empty();
             self.getJMapWidget().slideDown();
             self.getJAddressWidget().slideUp();
             
@@ -143,9 +183,9 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
                 $("#cdekcheckoutmodel-price").val("");
             }
             
-            setTimeout(function() {
-                self.getJForm().submit();
-            }, 300);
+            // Build once after the server has stored the cleared selection.
+            // ajaxSuccess above then loads current parcels and the latest revision.
+            self.getJForm().submit();
         });
     },
     
@@ -200,6 +240,7 @@ CSS
 ?>
 
 <div class="sx-cdek-widget" id="<?php echo $widget->id; ?>">
+    <p class="sx-delivery-calculation-error text-danger" role="alert"<?php echo $checkoutModel->deliveryCalculationError ? '' : ' style="display: none;"'; ?>><?php echo \yii\helpers\Html::encode($checkoutModel->deliveryCalculationError); ?></p>
     <?php $form = \yii\bootstrap\ActiveForm::begin([
         'enableClientValidation' => false,
     ]); ?>
@@ -211,7 +252,8 @@ CSS
         <?php echo $form->field($checkoutModel, 'worktime'); ?>
         <?php echo $form->field($checkoutModel, 'phone'); ?>
         <?php echo $form->field($checkoutModel, 'city'); ?>
-        <?php if($widget->deliveryHandler->isCalculatePrice) : ?>
+        <?php if($widget->deliveryHandler->isChooseTariff) : ?>
+            <?php echo $form->field($checkoutModel, 'tariffCode'); ?>
             <?php echo $form->field($checkoutModel, 'price'); ?>
         <?php endif; ?>
     </div>

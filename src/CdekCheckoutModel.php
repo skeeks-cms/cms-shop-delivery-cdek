@@ -34,6 +34,7 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
     public $phone;
 
     public $price;
+    public $tariffCode;
 
     public function rules()
     {
@@ -55,6 +56,7 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
             [['name'], 'string'],
             [['address'], 'string'],
             [['price'], 'string'],
+            [['tariffCode'], 'integer', 'min' => 1],
             [['id'], 'string'],
             [['worktime'], 'string'],
             [['phone'], 'string'],
@@ -135,10 +137,74 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
      */
     public function getMoney()
     {
-        if ((float)$this->price) {
-            return new Money((string)$this->price, $this->shopOrder->currency_code);
+        if ($this->supportsAutomaticCalculation()) {
+            return new Money($this->deliveryCalculationError ? '0' : (string)($this->price ?: '0'), $this->shopOrder->currency_code);
         }
         return parent::getMoney();
+    }
+
+    public function supportsAutomaticCalculation()
+    {
+        return $this->deliveryHandler && (bool)$this->deliveryHandler->isChooseTariff;
+    }
+
+    public function refreshDeliveryPrice($force = false)
+    {
+        if (!$this->supportsAutomaticCalculation()) {
+            return true;
+        }
+        $packages = $this->deliveryHandler->getOrderPackages($this->shopOrder);
+        $input = [
+            'point' => (string)$this->id,
+            'tariff' => (int)$this->tariffCode,
+            'origin' => $this->deliveryHandler->cityFrom ?: 'Москва',
+            'currency' => $this->shopOrder->currency_code,
+            'packages' => $packages,
+            'account' => hash('sha256', $this->deliveryHandler->account . ':' . $this->deliveryHandler->secure),
+        ];
+        $hash = hash('sha256', json_encode($input));
+        if (!$force && $this->deliveryCalculationHash === $hash
+            && (int)$this->deliveryCalculatedAt > time() - 300) {
+            return !$this->deliveryCalculationError;
+        }
+        $this->deliveryCalculationHash = $hash;
+        $this->deliveryCalculatedAt = time();
+        $this->deliveryCalculationError = null;
+        $this->price = null;
+        if (!$this->id || !$this->tariffCode) {
+            $this->deliveryCalculationError = 'Выберите пункт выдачи и тариф СДЭК для расчёта доставки.';
+            return false;
+        }
+        try {
+            if (!$packages || $this->shopOrder->currency_code !== 'RUB') {
+                throw new \RuntimeException('Unsupported calculation inputs');
+            }
+            $service = $this->deliveryHandler->createService();
+            $point = $service->getPickupPoint((string)$this->id);
+            $tariffs = $service->getTariffs([
+                'currency' => 1,
+                'lang' => 'rus',
+                'from_location' => ['address' => $input['origin']],
+                'to_location' => ['code' => (int)$point['location']['city_code']],
+                'packages' => $packages,
+            ]);
+            foreach ($tariffs as $tariff) {
+                if ((int)$tariff['tariff_code'] === (int)$this->tariffCode
+                    && in_array((int)$tariff['delivery_mode'], [2, 4, 5, 6], true)
+                    && isset($tariff['delivery_sum']) && is_numeric($tariff['delivery_sum'])
+                    && (float)$tariff['delivery_sum'] >= 0) {
+                    $this->price = (string)$tariff['delivery_sum'];
+                    return true;
+                }
+            }
+            $this->deliveryCalculationError = 'Выбранный тариф СДЭК недоступен для текущей корзины. Выберите другой тариф.';
+        } catch (\Throwable $exception) {
+            // Do not log requests, credentials or remote response bodies.
+            $this->deliveryCalculationError = 'Не удалось рассчитать доставку СДЭК. Повторите попытку или выберите другой способ доставки.';
+        }
+        // Failed quotes are retried on the next request, never treated as a fresh zero quote.
+        $this->deliveryCalculatedAt = null;
+        return false;
     }
 
 

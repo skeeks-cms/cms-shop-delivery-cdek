@@ -7,50 +7,15 @@
  */
 
 $cdekHandler = $shopDelivery->handler;
+$isChooseTariff = (bool)$cdekHandler->isChooseTariff;
 
 
-$goods = [];
-if ($shopOrder->shopOrderItems)
-{
-    foreach ($shopOrder->shopOrderItems as $orderItem)
-    {
-        $weight = '2';
-        $width = '20';
-        $height = '20';
-        $length = '20';
-
-        if ($orderItem->shopProduct) {
-            if ($orderItem->shopProduct->weight) {
-                $weight = $orderItem->shopProduct->weight;
-            }
-            if ($orderItem->shopProduct->width) {
-                $width = round($orderItem->shopProduct->width/10);
-            }
-            if ($orderItem->shopProduct->length) {
-                $length = round($orderItem->shopProduct->length/10);
-            }
-            if ($orderItem->shopProduct->height) {
-                $height = round($orderItem->shopProduct->height/10);
-            }
-        }
-
-
-        for ($i = 1; $i <= (int) $orderItem->quantity; $i++) {
-            $goods[] = [
-                "weight" => $weight,
-                "length" => $length,
-                "width" => $width,
-                "height" => $height,
-            ];
-        }
-
-    }
-}
+$goods = $isChooseTariff ? $cdekHandler->getOrderPackages($shopOrder) : [];
 
 //$widgetData = (array) \Yii::$app->request->get("cdek");
 $widgetData = [
     'apiKey'            => \Yii::$app->yaMap->api_key,
-    'from'            => $cdekHandler->cityFrom ? $cdekHandler->cityFrom : "Москва",
+    'from'            => $isChooseTariff ? ($cdekHandler->cityFrom ? $cdekHandler->cityFrom : "Москва") : null,
     /*'from' => [
         'code' => '184'
     ],*/
@@ -101,7 +66,7 @@ $jsData = \yii\helpers\Json::encode($widgetData);
         "root": 'cdek-map',
 
         canChoose: true,
-        sender: true,
+        sender: false,
 
         hideFilters: {
             have_cashless: true,

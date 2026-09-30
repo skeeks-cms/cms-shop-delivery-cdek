@@ -214,7 +214,7 @@ class CdekService
         }
     }
 
-    private function httpRequest($method, $data, $useFormData = false, $useJson = false)
+    protected function httpRequest($method, $data, $useFormData = false, $useJson = false)
     {
         if (!$this->authToken && $method !== 'oauth/token') {
             $this->getAuthToken();
@@ -248,18 +248,28 @@ class CdekService
 
         curl_setopt_array($ch, array(
             CURLOPT_USERAGENT => 'widget/3.10.0',
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 15,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HEADER => true,
         ));
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            $message = curl_error($ch);
+            $code = curl_errno($ch);
+            curl_close($ch);
+            throw new \RuntimeException($message, $code);
+        }
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $headers = substr($response, 0, $headerSize);
         $result = substr($response, $headerSize);
         $addedHeaders = $this->getHeaderValue($headers);
-        if ($result === false) {
-            throw new \RuntimeException(curl_error($ch), curl_errno($ch));
+        curl_close($ch);
+        if ($status < 200 || $status >= 300) {
+            throw new \RuntimeException('CDEK API returned HTTP ' . $status);
         }
 
         return array('result' => $result, 'addedHeaders' => $addedHeaders);
@@ -324,5 +334,34 @@ class CdekService
     protected function calculate()
     {
         return $this->httpRequest('calculator/tarifflist', $this->requestData, false, true);
+    }
+
+    /** Server-side APIs return data rather than writing/exiting the HTTP response. */
+    public function getPickupPoint($code)
+    {
+        $key = [__CLASS__, 'pickup-point', $this->baseUrl, (string)$code];
+        $cached = \Yii::$app->cache->get($key);
+        if ($cached !== false) {
+            return $cached;
+        }
+        $response = $this->httpRequest('deliverypoints', ['code' => $code]);
+        $points = json_decode($response['result'], true);
+        foreach ((array)$points as $point) {
+            if (is_array($point) && isset($point['code']) && $point['code'] === $code) {
+                \Yii::$app->cache->set($key, $point, $this->officesCacheDuration);
+                return $point;
+            }
+        }
+        throw new \RuntimeException('Pickup point unavailable');
+    }
+
+    public function getTariffs(array $request)
+    {
+        $response = $this->httpRequest('calculator/tarifflist', $request, false, true);
+        $data = json_decode($response['result'], true);
+        if (!isset($data['tariff_codes']) || !is_array($data['tariff_codes'])) {
+            throw new \RuntimeException('Invalid CDEK calculation response');
+        }
+        return $data['tariff_codes'];
     }
 }
