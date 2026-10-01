@@ -174,3 +174,24 @@ try {
 } catch (InvalidArgumentException $e) {
     verify(count($mapService->requests) === 2, 'Missing bounds never fall back to loading all pickup points');
 }
+
+$locationHandler = new TestCdekHandler(['account' => 'test', 'secure' => 'test']);
+verify($locationHandler->getWidgetDefaultLocation() === [37.6176, 55.7558], 'Default Moscow opens by coordinates without geocoding');
+$locationHandler->defaultCity = ' Рязань ';
+verify($locationHandler->getWidgetDefaultLocation() === [39.7364, 54.6292], 'Known configured city uses saved coordinates');
+$locationHandler->defaultCity = 'Другой город';
+verify($locationHandler->getWidgetDefaultLocation() === 'Другой город', 'Unknown cities retain the text geocoding fallback');
+$locationHandler->defaultLatitude = ' 54,7 ';
+$locationHandler->defaultLongitude = ' 39,8 ';
+verify($locationHandler->validate(['defaultLatitude', 'defaultLongitude'])
+    && $locationHandler->getWidgetDefaultLocation() === [39.8, 54.7], 'Explicit coordinates accept commas and override the city in longitude/latitude order');
+$locationHandler->defaultLatitude = '0'; $locationHandler->defaultLongitude = '0';
+verify($locationHandler->validate(['defaultLatitude', 'defaultLongitude'])
+    && $locationHandler->getWidgetDefaultLocation() === [0.0, 0.0], 'Zero coordinates are valid');
+$locationHandler->defaultLongitude = '';
+verify(!$locationHandler->validate(['defaultLatitude', 'defaultLongitude'])
+    && $locationHandler->hasErrors('defaultLongitude'), 'A single coordinate cannot be saved');
+$locationHandler->defaultLatitude = '91'; $locationHandler->defaultLongitude = '181';
+verify(!$locationHandler->validate(['defaultLatitude', 'defaultLongitude']), 'Out-of-range coordinates cannot be saved');
+$locationHandler->defaultLatitude = ''; $locationHandler->defaultLongitude = '';
+verify($locationHandler->validate(['defaultLatitude', 'defaultLongitude']), 'Legacy configurations may leave both coordinates empty');

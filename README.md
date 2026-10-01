@@ -32,6 +32,17 @@ failure/unavailable/zero quotes, fixed price and completed orders.
 
 ## Widget v4 checkout contract
 
+The optional `defaultLatitude` and `defaultLongitude` fields set the initial
+map centre without Yandex geocoding. Validate them together (latitude -90..90,
+longitude -180..180); comma decimals are normalized. The widget receives
+`[longitude, latitude]`. Explicit coordinates take priority; otherwise known
+`defaultCity` names use the saved approximate city-centre presets, and other
+names retain geocoding. Empty city defaults to Moscow. Admin preset buttons
+fill the city and both coordinates in the current form without submitting it.
+Coordinates affect only the initial camera, never the quote's origin or
+destination. Yandex Maps itself still requires a valid key; text search still
+uses the geocoder.
+
 The map uses the pinned official widget 4.0.0. It requests pickup points for
 the visible rectangle (`action=byCoordinate`), forwarded to
 `deliverypoints/byPolygons`. Panning/zooming loads the new area after the

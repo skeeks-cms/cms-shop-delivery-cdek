@@ -19,7 +19,7 @@ $widgetData = [
     /*'from' => [
         'code' => '184'
     ],*/
-    'defaultLocation' => $cdekHandler->defaultCity ? $cdekHandler->defaultCity : "Москва",
+    'defaultLocation' => $cdekHandler->getWidgetDefaultLocation(),
     'servicePath'     => \yii\helpers\Url::to(['calculate', 'delivery_id' => $shopDelivery->id, 'order_id' => $shopOrder->id]),
     'goods'     => $goods,
 ];
