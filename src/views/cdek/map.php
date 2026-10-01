@@ -41,7 +41,7 @@ $jsData = \yii\helpers\Json::encode($widgetData);
 <head>
     <meta charset="UTF-8">
     <title>Пример работы виджета ПВЗ</title>
-    <script src="https://cdn.jsdelivr.net/npm/@cdek-it/widget@3" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@cdek-it/widget@4.0.0" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime" type="text/javascript"></script>
     <link href="https://cdn.jsdelivr.net/npm/@unocss/reset/tailwind.min.css" rel="stylesheet">
     <!--<script id="ISDEKscript" type="text/javascript" src="https://widget.cdek.ru/widget/widjet.js" charset="utf-8"></script>-->

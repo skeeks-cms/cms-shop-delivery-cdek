@@ -30,7 +30,16 @@ Run `php tests/delivery-recalculation.php <vendor/autoload.php>` for isolated
 SQLite tests of item callbacks, totals, cache freshness, server-owned metadata,
 failure/unavailable/zero quotes, fixed price and completed orders.
 
-## Widget v3 checkout contract
+## Widget v4 checkout contract
+
+The map uses the pinned official widget 4.0.0. It requests pickup points for
+the visible rectangle (`action=byCoordinate`), forwarded to
+`deliverypoints/byPolygons`. Panning/zooming loads the new area after the
+widget's 500 ms debounce and cancels obsolete browser requests. Do not supply
+`offices`/`officesRaw`: that opts out of loading by bounds. Tariffs remain
+calculated for the selected destination, independently of loading markers.
+Update the map view and `CdekService` together: v4 checks the major version in
+`X-Service-Version`. The legacy `offices` action remains for older integrations.
 
 Use recipient mode (`sender: false`) for a buyer choosing a delivery point.
 `isChooseTariff` defaults to `0`, including for old configurations that only

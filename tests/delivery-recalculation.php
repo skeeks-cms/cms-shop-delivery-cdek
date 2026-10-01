@@ -141,3 +141,36 @@ $response = $controller->actionOrderCheckout();
 verify(!$response->success && strpos($response->message, 'недоступен') !== false && !$order->is_created,
     'Checkout action rejects unavailable tariff before order creation');
 verify($app->db->getTransaction() === null, 'Rejected checkout rolls back its transaction');
+
+class TestMapService extends CdekService
+{
+    public $requests = [];
+    public function points(array $params)
+    {
+        $property = new ReflectionProperty(CdekService::class, 'requestData');
+        $property->setAccessible(true);
+        $property->setValue($this, $params);
+        return $this->getOfficesByCoordinates();
+    }
+    protected function httpRequest($method, $data, $form = false, $json = false)
+    {
+        $this->requests[] = [$method, $data];
+        return ['result' => '[]', 'addedHeaders' => []];
+    }
+}
+$mapService = new TestMapService('test', 'test');
+$bounds = ['action' => 'byCoordinate', 'latitude_right_top' => '55.9', 'longitude_right_top' => '37.8',
+    'latitude_left_bottom' => '55.6', 'longitude_left_bottom' => '37.4', 'is_handout' => 'true', 'type' => 'PVZ'];
+$mapService->points($bounds);
+$expected = $bounds; unset($expected['action']);
+verify($mapService->requests[0] === ['deliverypoints/byPolygons', $expected],
+    'Map forwards visible bounds and pickup filters without full-list request');
+$bounds['longitude_right_top'] = '38.1';
+$mapService->points($bounds);
+verify($mapService->requests[1][1]['longitude_right_top'] === '38.1', 'Moving map requests the new visible area');
+try {
+    $mapService->points(['action' => 'byCoordinate']);
+    throw new RuntimeException('Missing bounds accepted');
+} catch (InvalidArgumentException $e) {
+    verify(count($mapService->requests) === 2, 'Missing bounds never fall back to loading all pickup points');
+}

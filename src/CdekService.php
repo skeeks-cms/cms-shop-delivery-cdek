@@ -4,6 +4,7 @@ namespace skeeks\cms\shop\cdek;
 use yii\base\InvalidConfigException;
 class CdekService
 {
+    const WIDGET_VERSION = '4.0.0';
     /**
      * @var string Auth login
      */
@@ -49,6 +50,8 @@ class CdekService
                 $this->sendResponse($this->getOffices());
             case 'calculate':
                 $this->sendResponse($this->calculate());
+            case 'byCoordinate':
+                $this->sendResponse($this->getOfficesByCoordinates());
             default:
                 $this->sendValidationError('Unknown action');
         }
@@ -58,7 +61,7 @@ class CdekService
     {
         $this->http_response_code(400);
         header('Content-Type: application/json');
-        header('X-Service-Version: 3.10.0');
+        header('X-Service-Version: ' . self::WIDGET_VERSION);
         echo json_encode(array('message' => $message));
         exit();
     }
@@ -225,6 +228,7 @@ class CdekService
         $headers = array(
             'Accept: application/json',
             'X-App-Name: widget_pvz',
+            'X-App-Version: ' . self::WIDGET_VERSION,
         );
 
         if ($this->authToken) {
@@ -247,7 +251,7 @@ class CdekService
         }
 
         curl_setopt_array($ch, array(
-            CURLOPT_USERAGENT => 'widget/3.10.0',
+            CURLOPT_USERAGENT => 'widget/' . self::WIDGET_VERSION,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 15,
             CURLOPT_HTTPHEADER => $headers,
@@ -287,7 +291,7 @@ class CdekService
     {
         $this->http_response_code(200);
         header('Content-Type: application/json');
-        header('X-Service-Version: 3.10.0');
+        header('X-Service-Version: ' . self::WIDGET_VERSION);
         if (!empty($data['addedHeaders'])) {
             foreach ($data['addedHeaders'] as $header) {
                 header($header);
@@ -334,6 +338,20 @@ class CdekService
     protected function calculate()
     {
         return $this->httpRequest('calculator/tarifflist', $this->requestData, false, true);
+    }
+
+    /** Widget v4 requests only the currently visible map rectangle. */
+    protected function getOfficesByCoordinates()
+    {
+        $params = $this->requestData;
+        unset($params['action']);
+        foreach (['latitude_right_top', 'longitude_right_top', 'latitude_left_bottom', 'longitude_left_bottom'] as $coordinate) {
+            if (!isset($params[$coordinate]) || !is_numeric($params[$coordinate])) {
+                throw new \InvalidArgumentException('Map bounds are required');
+            }
+        }
+
+        return $this->httpRequest('deliverypoints/byPolygons', $params);
     }
 
     /** Server-side APIs return data rather than writing/exiting the HTTP response. */
