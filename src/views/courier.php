@@ -28,7 +28,7 @@ $this->registerJs(<<<JS
             return String(data ? (data[name] == null ? '' : data[name]) : (input(name).val() || '')).trim();
         }));
     };
-    var active = function() { return !root.closest('.sx-delivery-tab').hasClass('sx-hidden'); };
+    var active = function() { return root.is(':visible'); };
     var clearTariffs = function() {
         quoteSequence++;
         if (quoteRequest) quoteRequest.abort();

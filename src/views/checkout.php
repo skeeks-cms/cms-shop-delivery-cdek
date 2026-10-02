@@ -74,7 +74,7 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         var mapCalculationHash = self.get('calculationHash') || '';
         var isMapOpen = self.get('isMapOpen');
         var ensureMap = function() {
-            if (!isMapOpen || self.getJWidget().closest('.sx-delivery-tab').hasClass('sx-hidden') || self.getJMapWidget().find('iframe').length) {
+            if (!isMapOpen || !self.getJWidget().is(':visible') || self.getJMapWidget().find('iframe').length) {
                 return;
             }
             var url = self.get('iframeUrl');
