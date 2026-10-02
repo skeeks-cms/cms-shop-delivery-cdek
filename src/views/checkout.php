@@ -14,8 +14,13 @@ $widget = $this->context;
 $checkoutModelCurrent = $widget->deliveryHandler->checkoutModel;
 $checkoutModel = $widget->shopOrder->deliveryHandlerCheckoutModel;
 
-if (!$checkoutModel instanceof $checkoutModelCurrent) {
+if (!$checkoutModel instanceof $checkoutModelCurrent
+    || (string)$checkoutModel->delivery->id !== (string)$widget->deliveryHandler->delivery->id) {
     $checkoutModel = $checkoutModelCurrent;
+}
+if ($widget->deliveryHandler->isCourier()) {
+    echo $this->render('courier', ['widget' => $widget, 'checkoutModel' => $checkoutModel]);
+    return;
 }
 $cdekConfig = [
     /*'defaultCity' => $widget->deliveryHandler->defaultCity ? $widget->deliveryHandler->defaultCity : "auto",
@@ -69,7 +74,7 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         var mapCalculationHash = self.get('calculationHash') || '';
         var isMapOpen = self.get('isMapOpen');
         var ensureMap = function() {
-            if (!isMapOpen || self.getJMapWidget().find('iframe').length) {
+            if (!isMapOpen || self.getJWidget().closest('.sx-delivery-tab').hasClass('sx-hidden') || self.getJMapWidget().find('iframe').length) {
                 return;
             }
             var url = self.get('iframeUrl');
@@ -80,7 +85,13 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
         };
 
         // Cart AJAX may update totals without rendering the delivery widget again.
-        $(document).off('ajaxSuccess.sxCdekDelivery').on('ajaxSuccess.sxCdekDelivery', function(e, xhr) {
+        var namespace = '.sxCdekDelivery' + self.get('id');
+        $(document).off('click' + namespace).on('click' + namespace, '.sx-delivery', function() {
+            if (String($(this).data('id')) !== String(self.get('deliveryId'))) {
+                self.getJMapWidget().empty();
+            }
+        });
+        $(document).off('ajaxSuccess' + namespace).on('ajaxSuccess' + namespace, function(e, xhr) {
             var response = xhr.responseJSON;
             var order = response && response.data;
             if (!order || String(order.id) !== String(self.get('orderId')) ||
@@ -117,20 +128,19 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
             var chooseData = data.data;
             self.getJWidget().find('.sx-delivery-calculation-error').hide();
             
-            console.log(chooseData);
             
-            $("#cdekcheckoutmodel-name").val(chooseData.address.name);
-            $("#cdekcheckoutmodel-address").val(chooseData.address.address);
-            $("#cdekcheckoutmodel-id").val(chooseData.address.code);
-            $("#cdekcheckoutmodel-worktime").val(chooseData.address.work_time);
+            $("#cdekcheckoutmodel-name", self.getJWidget()).val(chooseData.address.name);
+            $("#cdekcheckoutmodel-address", self.getJWidget()).val(chooseData.address.address);
+            $("#cdekcheckoutmodel-id", self.getJWidget()).val(chooseData.address.code);
+            $("#cdekcheckoutmodel-worktime", self.getJWidget()).val(chooseData.address.work_time);
             /*$("#cdekcheckoutmodel-phone").val(chooseData.address.Phone);*/
-            $("#cdekcheckoutmodel-city").val(chooseData.address.city);
-            $("#cdekcheckoutmodel-tariffcode").val(chooseData.tariff ? chooseData.tariff.tariff_code : "");
+            $("#cdekcheckoutmodel-city", self.getJWidget()).val(chooseData.address.city);
+            $("#cdekcheckoutmodel-tariffcode", self.getJWidget()).val(chooseData.tariff ? chooseData.tariff.tariff_code : "");
             //Если включен рассчет доставки
-            if ($("#cdekcheckoutmodel-price").length) {
+            if ($("#cdekcheckoutmodel-price", self.getJWidget()).length) {
                 // Виджет v3 возвращает стоимость в выбранном тарифе.
                 var deliveryPrice = chooseData.tariff ? chooseData.tariff.delivery_sum : chooseData.price;
-                $("#cdekcheckoutmodel-price").val(deliveryPrice == null ? "" : String(deliveryPrice));
+                $("#cdekcheckoutmodel-price", self.getJWidget()).val(deliveryPrice == null ? "" : String(deliveryPrice));
             }
             
             if (chooseData.address.work_time) {
@@ -161,7 +171,7 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
             self.getJMapWidget().stop(true, true).hide().empty();
             
             setTimeout(function() {
-                $("#cdekcheckoutmodel-address").trigger("change");
+                $("#cdekcheckoutmodel-address", self.getJWidget()).trigger("change");
             });
         });
         
@@ -172,15 +182,15 @@ sx.classes.CdekWidget = sx.classes.Component.extend({
             self.getJAddressWidget().slideUp();
             
             
-            $("#cdekcheckoutmodel-name").val("");
-            $("#cdekcheckoutmodel-address").val("");
-            $("#cdekcheckoutmodel-id").val("");
-            $("#cdekcheckoutmodel-worktime").val("");
-            $("#cdekcheckoutmodel-city").val("");
-            $("#cdekcheckoutmodel-phone").val("");
+            $("#cdekcheckoutmodel-name", self.getJWidget()).val("");
+            $("#cdekcheckoutmodel-address", self.getJWidget()).val("");
+            $("#cdekcheckoutmodel-id", self.getJWidget()).val("");
+            $("#cdekcheckoutmodel-worktime", self.getJWidget()).val("");
+            $("#cdekcheckoutmodel-city", self.getJWidget()).val("");
+            $("#cdekcheckoutmodel-phone", self.getJWidget()).val("");
             //Если включен рассчет доставки
-            if ($("#cdekcheckoutmodel-price").length) {
-                $("#cdekcheckoutmodel-price").val("");
+            if ($("#cdekcheckoutmodel-price", self.getJWidget()).length) {
+                $("#cdekcheckoutmodel-price", self.getJWidget()).val("");
             }
             
             // Build once after the server has stored the cleared selection.

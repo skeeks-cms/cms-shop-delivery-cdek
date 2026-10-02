@@ -1,5 +1,38 @@
 # cms-shop-delivery-cdek
 
+## Courier delivery and sender handoff
+
+Each delivery method has independent `recipientMode` (`office` by default,
+or `door`) and `senderMode` (`all` by default, `office`, or `door`). Old sites
+retain pickup selection and their previous tariff list. Create/configure two
+delivery methods for separate cart buttons. Sender `office` means the merchant
+hands parcels to CDEK; sender `door` means CDEK collects from the sender.
+Filter both the pickup widget response and server-side quote by these modes.
+
+Courier mode renders an address form without loading Yandex/provider maps.
+Cities autocomplete after two characters with a 400 ms debounce using CDEK
+`location/suggest/cities` with `name`. `location/cities` with `city` matches
+complete names and is unsuitable for prefixes. Suggestions provide `code`
+and `full_name`; show region/country to distinguish duplicate names.
+The server resolves the chosen CDEK city code; do not trust a posted city name.
+Street and house are mandatory; apartment/office, entrance, floor and courier
+comment are optional. Save them in handler data and standard order delivery
+fields. Fixed-price courier mode still requires and validates the address.
+
+Calculated courier tariffs use the current cart and verified city/address.
+Only matching sender-to-door tariffs are offered. Retain tariff selection on
+quantity changes, invalidate options on address edits, and force verification
+at checkout through the common delivery lifecycle. Include delivery mode and
+address in the quote fingerprint. Use a hidden canonical tariff input so
+disabling the visible select during loading does not remove its code from a
+concurrent form save. Apply async responses only to the matching saved address,
+active delivery tab and latest request. Unload inactive pickup map iframes.
+Load tariffs automatically after address fields are saved; show the retry
+button only after a failed tariff request.
+
+This package calculates delivery and saves checkout details. It does not create
+a CDEK waybill or book a courier collection automatically.
+
 ## Automatic recalculation
 
 Requires the delivery calculation contract in `skeeks/cms-shop >= 3.2.7.26`.

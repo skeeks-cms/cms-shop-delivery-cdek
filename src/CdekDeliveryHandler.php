@@ -12,6 +12,7 @@ use skeeks\cms\shop\delivery\DeliveryHandler;
 use skeeks\yii2\form\fields\BoolField;
 use skeeks\yii2\form\fields\FieldSet;
 use skeeks\yii2\form\fields\TextField;
+use skeeks\yii2\form\fields\SelectField;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Html;
 
@@ -20,6 +21,25 @@ use yii\helpers\Html;
  */
 class CdekDeliveryHandler extends DeliveryHandler
 {
+    public $recipientMode = 'office';
+    /** all retains the old tariff list for existing installations. */
+    public $senderMode = 'all';
+
+    public function isCourier()
+    {
+        return $this->recipientMode === 'door';
+    }
+
+    public function allowsDeliveryMode($mode)
+    {
+        $modes = $this->isCourier() ? [1, 3] : [2, 4, 5, 6];
+        if ($this->senderMode === 'office') {
+            $modes = $this->isCourier() ? [3] : [4, 6];
+        } elseif ($this->senderMode === 'door') {
+            $modes = $this->isCourier() ? [1] : [2, 5];
+        }
+        return in_array((int)$mode, $modes, true);
+    }
 
     /**
      * @var string Какой город отображается по умолчанию
@@ -163,6 +183,8 @@ class CdekDeliveryHandler extends DeliveryHandler
     {
         return ArrayHelper::merge(parent::rules(), [
             [['defaultCity'], 'string'],
+            [['recipientMode'], 'in', 'range' => ['office', 'door']],
+            [['senderMode'], 'in', 'range' => ['all', 'office', 'door']],
             [['defaultLatitude', 'defaultLongitude'], 'filter', 'filter' => static function ($value) {
                 return str_replace(',', '.', trim((string)$value));
             }],
@@ -191,6 +213,8 @@ class CdekDeliveryHandler extends DeliveryHandler
     public function attributeLabels()
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
+            'recipientMode' => 'Как покупатель получает заказ',
+            'senderMode' => 'Как отправление передаётся СДЭК',
             'defaultCity'      => "Какой город отображается по умолчанию",
             'defaultLatitude' => 'Широта центра карты',
             'defaultLongitude' => 'Долгота центра карты',
@@ -217,11 +241,13 @@ class CdekDeliveryHandler extends DeliveryHandler
     public function attributeHints()
     {
         return ArrayHelper::merge(parent::attributeHints(), [
+            'recipientMode' => 'ПВЗ — покупатель выбирает пункт на карте. Курьер — покупатель указывает город, улицу и дом. Создайте отдельный способ доставки для каждого режима, чтобы в корзине было две кнопки.',
+            'senderMode' => 'Сдаём в пункт СДЭК — тарифы «склад → склад» или «склад → дверь». Курьер забирает у отправителя — «дверь → склад» или «дверь → дверь». «Склад» означает пункт СДЭК. Все варианты сохраняют прежний список тарифов.',
             'defaultCity' => "Город, который покупатель увидит при открытии карты. Для городов из готового списка координаты уже сохранены. Если город не указан, используется Москва.",
             'defaultLatitude' => "Необязательно. Заполните широту и долготу, чтобы карта сразу открывалась в нужном месте без преобразования названия города через геокодер. Координаты имеют приоритет над городом. Можно выбрать готовый город ниже или указать свою точку; дробную часть отделяйте точкой или запятой.",
             'defaultLongitude' => "Координаты задают только начальный центр карты — покупатель сможет перемещать её и выбирать пункты в других городах. Ключ Яндекс.Карт всё равно нужен для самой карты; поиск адресов текстом требует геокодер. Оставьте оба поля пустыми, чтобы использовать город.",
             'isCalculatePrice' => "Если выбрано нет, то цена за доставку не будет рассчитываться.",
-            'isChooseTariff' => "Нет — покупатель выбирает только пункт выдачи, стоимость берётся из поля «Цена» этого способа доставки. Да — покупатель также выбирает тариф СДЭК, и его стоимость добавляется к заказу.",
+            'isChooseTariff' => "Нет — стоимость берётся из поля «Цена» этого способа доставки. Да — покупатель выбирает тариф СДЭК, и его стоимость добавляется к заказу. В курьерском режиме расчёт выполняется по указанному адресу.",
             'isRequiredSelectPoint' => "Если выбрано да - то без выбранного ПВЗ заказ оформить не получится. Если выбрано нет - то заказ можно оформить без выбора ПВЗ",
 
             'account' => "Получить доступ по адресу: <a href='https://lk.cdek.ru/integration'>https://lk.cdek.ru/integration</a>",
@@ -242,6 +268,14 @@ class CdekDeliveryHandler extends DeliveryHandler
                 'fields' => [
                     'account',
                     'secure',
+                    'recipientMode' => [
+                        'class' => SelectField::class, 'allowNull' => false,
+                        'items' => ['office' => 'В пункте выдачи СДЭК', 'door' => 'Курьером по адресу'],
+                    ],
+                    'senderMode' => [
+                        'class' => SelectField::class, 'allowNull' => false,
+                        'items' => ['all' => 'Все варианты (как раньше)', 'office' => 'Сдаём в пункт СДЭК', 'door' => 'Курьер забирает у отправителя'],
+                    ],
 
                     'defaultCity' => [
                         'class' => TextField::class,

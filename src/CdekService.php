@@ -29,6 +29,7 @@ class CdekService
      * @var int Время кеширования полного списка точек, сек.
      */
     public $officesCacheDuration = 3600;
+    public $allowedDeliveryModes;
 
     public function __construct($login, $secret, $baseUrl = 'https://api.cdek.ru/v2')
     {
@@ -337,7 +338,19 @@ class CdekService
 
     protected function calculate()
     {
-        return $this->httpRequest('calculator/tarifflist', $this->requestData, false, true);
+        $params = $this->requestData;
+        unset($params['action']);
+        $response = $this->httpRequest('calculator/tarifflist', $params, false, true);
+        if ($this->allowedDeliveryModes !== null) {
+            $data = json_decode($response['result'], true);
+            if (isset($data['tariff_codes']) && is_array($data['tariff_codes'])) {
+                $data['tariff_codes'] = array_values(array_filter($data['tariff_codes'], function ($tariff) {
+                    return isset($tariff['delivery_mode']) && in_array((int)$tariff['delivery_mode'], $this->allowedDeliveryModes, true);
+                }));
+                $response['result'] = json_encode($data);
+            }
+        }
+        return $response;
     }
 
     /** Widget v4 requests only the currently visible map rectangle. */
@@ -381,5 +394,58 @@ class CdekService
             throw new \RuntimeException('Invalid CDEK calculation response');
         }
         return $data['tariff_codes'];
+    }
+
+    public function searchCities($query)
+    {
+        $query = trim((string)$query);
+        if (mb_strlen($query) < 2 || mb_strlen($query) > 100) {
+            return [];
+        }
+        $key = [__CLASS__, 'city-suggestions', $this->baseUrl, $query];
+        $cities = \Yii::$app->cache->get($key);
+        if ($cities !== false) {
+            return $cities;
+        }
+        // location/cities matches full names; suggest/cities accepts a prefix.
+        $response = $this->httpRequest('location/suggest/cities', ['name' => $query]);
+        $suggestions = json_decode($response['result'], true);
+        if (!is_array($suggestions) || isset($suggestions['errors'])) {
+            throw new \RuntimeException('Invalid city suggestions response');
+        }
+        $cities = [];
+        foreach ($suggestions as $city) {
+            if (is_array($city) && !empty($city['code']) && !empty($city['full_name'])) {
+                $cities[] = ['code' => (int)$city['code'], 'city' => $city['full_name']];
+            }
+        }
+        \Yii::$app->cache->set($key, $cities, 3600);
+        return $cities;
+    }
+
+    public function getCity($code)
+    {
+        foreach ($this->getCities(['code' => (int)$code, 'size' => 1]) as $city) {
+            if (isset($city['code']) && (int)$city['code'] === (int)$code) {
+                return $city;
+            }
+        }
+        throw new \RuntimeException('City unavailable');
+    }
+
+    private function getCities(array $params)
+    {
+        $key = [__CLASS__, 'cities', $this->baseUrl, $params];
+        $cities = \Yii::$app->cache->get($key);
+        if ($cities !== false) {
+            return $cities;
+        }
+        $response = $this->httpRequest('location/cities', $params);
+        $cities = json_decode($response['result'], true);
+        if (!is_array($cities) || isset($cities['errors'])) {
+            throw new \RuntimeException('Invalid city response');
+        }
+        \Yii::$app->cache->set($key, $cities, 3600);
+        return $cities;
     }
 }

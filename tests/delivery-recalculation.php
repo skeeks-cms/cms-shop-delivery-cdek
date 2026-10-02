@@ -27,14 +27,16 @@ class TestCdekService extends CdekService
     public $unavailable = false;
     public $zero = false;
     public $lastRequest;
+    public $mode = 4;
     protected function httpRequest($method, $data, $form = false, $json = false)
     {
         if ($method === 'deliverypoints') return ['result' => json_encode([['code' => 'TEST1', 'location' => ['city_code' => 44]]])];
+        if ($method === 'location/cities') return ['result' => json_encode([['code' => 44, 'city' => 'Москва', 'region' => 'Москва']])];
         $this->calls++;
         $this->lastRequest = $data;
         if ($this->fail) throw new RuntimeException('Simulated API failure');
         $sum = $this->zero ? 0 : count($data['packages']) * 100;
-        return ['result' => json_encode(['tariff_codes' => $this->unavailable ? [] : [['tariff_code' => 136, 'delivery_mode' => 4, 'delivery_sum' => $sum]]])];
+        return ['result' => json_encode(['tariff_codes' => $this->unavailable ? [] : [['tariff_code' => 136, 'delivery_mode' => $this->mode, 'delivery_sum' => $sum]]])];
     }
 }
 class TestCdekHandler extends CdekDeliveryHandler
@@ -49,6 +51,8 @@ class TestOrder extends ShopOrder
     public $currency_code = 'RUB';
     public $is_created = 0;
     public $transitioning = false;
+    public $shop_store_id, $delivery_address, $delivery_latitude, $delivery_longitude;
+    public $delivery_entrance, $delivery_apartment_number, $delivery_floor, $delivery_comment;
     public function init() {} // isolate infrastructure; retain real calculation and persistence methods
     public static function tableName() { return 'test_order'; }
     public function getShopOrderItems() { return $this->items; }
@@ -195,3 +199,56 @@ $locationHandler->defaultLatitude = '91'; $locationHandler->defaultLongitude = '
 verify(!$locationHandler->validate(['defaultLatitude', 'defaultLongitude']), 'Out-of-range coordinates cannot be saved');
 $locationHandler->defaultLatitude = ''; $locationHandler->defaultLongitude = '';
 verify($locationHandler->validate(['defaultLatitude', 'defaultLongitude']), 'Legacy configurations may leave both coordinates empty');
+
+$handler->recipientMode = 'door'; $handler->senderMode = 'door';
+$service->unavailable = false; $service->mode = 1;
+$model->cityCode = 44; $model->city = 'Forged name'; $model->street = 'Тестовая'; $model->house = '10'; $model->flat = '5';
+$model->entrance = '2'; $model->floor = '3'; $model->comment = 'Позвонить перед доставкой';
+$order->recalculate();
+verify($model->price === '100' && $service->lastRequest['to_location'] === ['code' => 44, 'address' => 'Тестовая, 10'],
+    'Courier quote uses verified CDEK city and street/house without a pickup point');
+verify($model->city === 'Москва, Москва', 'City name from browser is replaced with authoritative city');
+$hash = $model->deliveryCalculationHash;
+$model->house = '11'; $order->recalculate();
+verify($hash !== $model->deliveryCalculationHash && $service->lastRequest['to_location']['address'] === 'Тестовая, 11', 'Address changes invalidate courier quote');
+$order->items[0]->quantity = 2; $item->afterSaveCallback(new yii\base\Event());
+verify($model->price === '200', 'Courier selected tariff automatically recalculates on quantity change');
+$service->mode = 3;
+verify(!$order->refreshDeliveryCalculation(true) && $model->price === null, 'Door-origin courier cannot accept warehouse-origin tariff');
+$handler->senderMode = 'office';
+verify($order->refreshDeliveryCalculation(true), 'Warehouse-origin courier allows warehouse-to-door tariff');
+$service->mode = 4;
+verify(!$order->refreshDeliveryCalculation(true), 'Courier rejects pickup tariff even if tariff code was posted');
+$service->mode = 3; $model->house = '';
+verify(!$order->refreshDeliveryCalculation(true) && !$model->validate(['house']), 'Missing courier house blocks calculation and validation');
+$model->house = '11'; $model->cityCode = 999;
+verify(!$order->refreshDeliveryCalculation(true), 'Unknown city code cannot produce quote');
+$model->cityCode = 44; $handler->isChooseTariff = 0; $model->price = '99999';
+verify($model->money->amount === '350' && $model->validate(['cityCode', 'street', 'house']), 'Fixed courier mode requires address and ignores old quoted price');
+$order->delivery_address = null;
+$model->modifyOrder($order);
+verify($order->delivery_address === 'Москва, Москва, Тестовая, 11' && $order->delivery_apartment_number === '5'
+    && $order->delivery_comment === 'Позвонить перед доставкой', 'Courier details reach standard order address fields');
+$visible = $model->visibleAttributes;
+verify(isset($visible['flat'], $visible['comment']) && !isset($visible['id']), 'Manager sees courier details without stale pickup fields');
+$handler->recipientMode = 'office'; $handler->senderMode = 'door';
+verify($handler->allowsDeliveryMode(2) && !$handler->allowsDeliveryMode(4), 'Door-to-pickup filter supported');
+$handler->senderMode = 'all';
+verify($handler->allowsDeliveryMode(2) && $handler->allowsDeliveryMode(4), 'Legacy pickup keeps both sender modes by default');
+
+class TestCitySuggestions extends CdekService
+{
+    public $requests = [];
+    protected function httpRequest($method, $data, $form = false, $json = false)
+    {
+        $this->requests[] = [$method, $data];
+        return ['result' => json_encode([['code' => 479, 'full_name' => 'Солнечногорск, Московская область, Россия']])];
+    }
+}
+$suggest = new TestCitySuggestions('test', 'test', 'https://suggestions.test');
+$cities = $suggest->searchCities(' солнечно ');
+verify($suggest->requests === [['location/suggest/cities', ['name' => 'солнечно']]]
+    && $cities === [['code' => 479, 'city' => 'Солнечногорск, Московская область, Россия']],
+    'Autocomplete uses prefix API and preserves CDEK code and full region');
+$suggest->searchCities('солнечно');
+verify(count($suggest->requests) === 1 && $suggest->searchCities('с') === [], 'City suggestions are cached and short queries do not reach CDEK');

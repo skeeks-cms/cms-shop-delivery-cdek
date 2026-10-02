@@ -35,6 +35,13 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
 
     public $price;
     public $tariffCode;
+    public $cityCode;
+    public $street;
+    public $house;
+    public $flat;
+    public $entrance;
+    public $floor;
+    public $comment;
 
     public function rules()
     {
@@ -46,7 +53,7 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
                 'when'    => function () {
 
                     if ($this->deliveryHandler) {
-                        return $this->deliveryHandler->isRequiredSelectPoint;
+                        return !$this->deliveryHandler->isCourier() && $this->deliveryHandler->isRequiredSelectPoint;
                     }
                     return true;
             },
@@ -60,6 +67,13 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
             [['id'], 'string'],
             [['worktime'], 'string'],
             [['phone'], 'string'],
+            [['cityCode'], 'integer', 'min' => 1],
+            [['street', 'house', 'flat', 'entrance', 'floor', 'comment'], 'trim'],
+            [['street', 'house', 'flat', 'entrance', 'floor'], 'string', 'max' => 255],
+            [['comment'], 'string', 'max' => 1000],
+            [['cityCode', 'street', 'house'], 'required', 'when' => function () {
+                return $this->deliveryHandler && $this->deliveryHandler->isCourier();
+            }],
         ]);
     }
 
@@ -73,6 +87,10 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
             'worktime' => "Время работы",
             'phone'    => "Телефон",
             'city'     => "Город",
+            'cityCode' => 'Город из справочника СДЭК',
+            'street' => 'Улица', 'house' => 'Дом / корпус', 'flat' => 'Квартира / офис',
+            'entrance' => 'Подъезд', 'floor' => 'Этаж', 'comment' => 'Комментарий курьеру',
+            'tariffCode' => 'Тариф доставки',
         ]);
     }
 
@@ -82,6 +100,14 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
     public function getVisibleAttributes()
     {
         $result = [];
+        if ($this->deliveryHandler && $this->deliveryHandler->isCourier()) {
+            foreach (['city', 'street', 'house', 'flat', 'entrance', 'floor', 'comment', 'tariffCode'] as $attribute) {
+                if ($this->$attribute !== null && $this->$attribute !== '') {
+                    $result[$attribute] = ['value' => $this->$attribute, 'label' => $this->getAttributeLabel($attribute)];
+                }
+            }
+            return $result;
+        }
 
         if ($this->city) {
             $result['city'] = [
@@ -156,6 +182,10 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
         $packages = $this->deliveryHandler->getOrderPackages($this->shopOrder);
         $input = [
             'point' => (string)$this->id,
+            'recipientMode' => $this->deliveryHandler->recipientMode,
+            'senderMode' => $this->deliveryHandler->senderMode,
+            'destination' => $this->deliveryHandler->isCourier()
+                ? [(int)$this->cityCode, trim((string)$this->street), trim((string)$this->house), trim((string)$this->flat)] : null,
             'tariff' => (int)$this->tariffCode,
             'origin' => $this->deliveryHandler->cityFrom ?: 'Москва',
             'currency' => $this->shopOrder->currency_code,
@@ -171,8 +201,11 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
         $this->deliveryCalculatedAt = time();
         $this->deliveryCalculationError = null;
         $this->price = null;
-        if (!$this->id || !$this->tariffCode) {
-            $this->deliveryCalculationError = 'Выберите пункт выдачи и тариф СДЭК для расчёта доставки.';
+        $courier = $this->deliveryHandler->isCourier();
+        if ((!$courier && !$this->id) || ($courier && !$this->validate(['cityCode', 'street', 'house'])) || !$this->tariffCode) {
+            $this->deliveryCalculationError = $courier
+                ? 'Укажите город, улицу и дом, затем выберите тариф СДЭК.'
+                : 'Выберите пункт выдачи и тариф СДЭК для расчёта доставки.';
             return false;
         }
         try {
@@ -180,17 +213,10 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
                 throw new \RuntimeException('Unsupported calculation inputs');
             }
             $service = $this->deliveryHandler->createService();
-            $point = $service->getPickupPoint((string)$this->id);
-            $tariffs = $service->getTariffs([
-                'currency' => 1,
-                'lang' => 'rus',
-                'from_location' => ['address' => $input['origin']],
-                'to_location' => ['code' => (int)$point['location']['city_code']],
-                'packages' => $packages,
-            ]);
+            $tariffs = $this->getAvailableTariffs($service);
             foreach ($tariffs as $tariff) {
                 if ((int)$tariff['tariff_code'] === (int)$this->tariffCode
-                    && in_array((int)$tariff['delivery_mode'], [2, 4, 5, 6], true)
+                    && $this->deliveryHandler->allowsDeliveryMode($tariff['delivery_mode'])
                     && isset($tariff['delivery_sum']) && is_numeric($tariff['delivery_sum'])
                     && (float)$tariff['delivery_sum'] >= 0) {
                     $this->price = (string)$tariff['delivery_sum'];
@@ -205,6 +231,71 @@ class CdekCheckoutModel extends DeliveryCheckoutModel
         // Failed quotes are retried on the next request, never treated as a fresh zero quote.
         $this->deliveryCalculatedAt = null;
         return false;
+    }
+
+    /** Same authoritative request for tariff options and the final quote. */
+    public function getAvailableTariffs($service = null)
+    {
+        $service = $service ?: $this->deliveryHandler->createService();
+        if ($this->deliveryHandler->isCourier()) {
+            if (!$this->validate(['cityCode', 'street', 'house'])) {
+                throw new \InvalidArgumentException('Укажите город, улицу и дом.');
+            }
+            $city = $service->getCity($this->cityCode);
+            $this->city = $city['city'] . (!empty($city['region']) ? ', ' . $city['region'] : '');
+            $this->address = trim($this->street) . ', ' . trim($this->house);
+            $destination = ['code' => (int)$city['code'], 'address' => $this->address];
+        } else {
+            $point = $service->getPickupPoint((string)$this->id);
+            $destination = ['code' => (int)$point['location']['city_code']];
+        }
+        $packages = $this->deliveryHandler->getOrderPackages($this->shopOrder);
+        if (!$packages || $this->shopOrder->currency_code !== 'RUB') {
+            throw new \RuntimeException('Unsupported calculation inputs');
+        }
+        $tariffs = $service->getTariffs([
+            'currency' => 1, 'lang' => 'rus',
+            'from_location' => ['address' => $this->deliveryHandler->cityFrom ?: 'Москва'],
+            'to_location' => $destination, 'packages' => $packages,
+        ]);
+        return array_values(array_filter($tariffs, function ($tariff) {
+            return isset($tariff['delivery_mode'], $tariff['tariff_code'], $tariff['delivery_sum'])
+                && $this->deliveryHandler->allowsDeliveryMode($tariff['delivery_mode'])
+                && is_numeric($tariff['delivery_sum']) && (float)$tariff['delivery_sum'] >= 0;
+        }));
+    }
+
+    public function beforeValidate()
+    {
+        if (!parent::beforeValidate()) {
+            return false;
+        }
+        // Fixed-price courier orders still need an authoritative destination city.
+        if ($this->deliveryHandler && $this->deliveryHandler->isCourier()
+            && !$this->supportsAutomaticCalculation() && filter_var($this->cityCode, FILTER_VALIDATE_INT)
+            && (int)$this->cityCode > 0) {
+            try {
+                $city = $this->deliveryHandler->createService()->getCity($this->cityCode);
+                $this->city = $city['city'] . (!empty($city['region']) ? ', ' . $city['region'] : '');
+            } catch (\Throwable $e) {
+                $this->addError('cityCode', 'Не удалось проверить город СДЭК. Выберите город повторно.');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public function modifyOrder(\skeeks\cms\shop\models\ShopOrder $order)
+    {
+        parent::modifyOrder($order);
+        if ($this->deliveryHandler->isCourier()) {
+            $order->delivery_address = $this->city . ', ' . trim($this->street) . ', ' . trim($this->house);
+            $order->delivery_apartment_number = $this->flat;
+            $order->delivery_entrance = $this->entrance;
+            $order->delivery_floor = $this->floor;
+            $order->delivery_comment = $this->comment;
+        }
+        return $this;
     }
 
 
