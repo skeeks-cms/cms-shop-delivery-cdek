@@ -20,7 +20,7 @@ $this->registerJs(<<<JS
     var retry = root.find('[data-sx-cdek-retry]');
     var cities = root.find('[data-sx-cdek-cities]');
     var tariff = root.find('[data-sx-cdek-tariff]'), tariffCode = input('tariffCode'), revision = null, searchRequest, quoteRequest;
-    var quoteSequence = 0, searchSequence = 0, searchTimer, dirty = false;
+    var quoteSequence = 0, searchSequence = 0, searchTimer, saveTimer, dirty = false;
     var error = function(message) { feedback.text(message || '').toggle(Boolean(message)); };
     var ready = function() { return input('cityCode').val() && input('street').val().trim() && input('house').val().trim(); };
     var addressKey = function(data) {
@@ -60,9 +60,10 @@ $this->registerJs(<<<JS
             }
         });
     };
-    var save = function() { dirty = true; form.submit(); };
+    var save = function() { clearTimeout(saveTimer); dirty = true; form.submit(); };
     var invalidate = function() {
-        dirty = true;
+        clearTimeout(saveTimer);
+        dirty = true; revision = null;
         clearTariffs(); retry.hide(); status.text(''); error('');
     };
     var searchCities = function() {
@@ -99,15 +100,26 @@ $this->registerJs(<<<JS
         if (event.key === 'Escape') { clearTimeout(searchTimer); searchSequence++; cities.empty(); status.text(''); }
         if (event.key === 'ArrowDown' && cities.find('button').length) { event.preventDefault(); cities.find('button').first().trigger('focus'); }
     });
-    input('street').add(input('house')).add(input('flat')).on('input', invalidate).on('change', save);
-    input('entrance').add(input('floor')).add(input('comment')).on('change', save);
+    ['street', 'house', 'flat'].forEach(function(name) {
+        form.on('input', '[name="CdekCheckoutModel[' + name + ']"]', function() {
+            invalidate(); clearTimeout(saveTimer);
+            saveTimer = setTimeout(function() { if (active()) save(); }, 400);
+        })
+            .on('change', '[name="CdekCheckoutModel[' + name + ']"]', save);
+    });
+    ['entrance', 'floor', 'comment'].forEach(function(name) {
+        form.on('input', '[name="CdekCheckoutModel[' + name + ']"]', function() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function() { if (active()) save(); }, 400);
+        }).on('change', '[name="CdekCheckoutModel[' + name + ']"]', save);
+    });
     tariff.on('change', function() { tariffCode.val(tariff.val() || ''); save(); });
     root.find('[data-sx-cdek-retry]').on('click', function() { revision = null; save(); });
     form.on('change-delivery', save);
     var namespace = '.sxCdekDelivery' + config.id;
     $(document).off('click' + namespace).on('click' + namespace, '.sx-delivery', function() {
         if (String($(this).data('id')) !== String(config.deliveryId)) {
-            quoteSequence++; searchSequence++; clearTimeout(searchTimer);
+            quoteSequence++; searchSequence++; clearTimeout(searchTimer); clearTimeout(saveTimer);
             if (quoteRequest) quoteRequest.abort(); if (searchRequest) searchRequest.abort();
             cities.empty(); status.text(''); revision = null;
         }
@@ -122,7 +134,7 @@ $this->registerJs(<<<JS
         if (dirty) return;
         error(order.deliveryCalculation.error);
         var next = order.deliveryCalculation.inputHash || '';
-        if (config.calculated && next !== revision) { revision = next; loadTariffs(); }
+        if (config.calculated && ready() && active() && next !== revision) { revision = next; loadTariffs(); }
     });
     // Cart forms are submitted by the surrounding shop widget. No map scripts are loaded here.
     loadTariffs();
